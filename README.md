@@ -104,3 +104,24 @@ If any of the protoc-get-* (like protoc-gen-go , protoc-gen-grpc-gateway or prot
 * Make sure you installed the package `go get -u github.com/golang/protobuf/protoc-gen-go`
 * That will create a binary on $GOPATH/bin/protoc-gen-go
 * Make sure you have `export PATH=$PATH:$GOPATH/bin`
+
+
+
+执行`go env`命令检查go环境配置：
+配置好`GOPATH`和`GOBIN`两个环境变量。
+
+1. 从GitHub下载编译pb需要用到的三方api源码:
+```
+mkdir -p $GOPATH/src/github.com/grpc-ecosystem
+cd $GOPATH/src/github.com/grpc-ecosystem
+
+git clone https://github.com/grpc-ecosystem/grpc-gateway.git
+```
+
+2. Grpc基础工具不需要改变，只需下载以下两个插件:
+```
+export GO111MODULE=on
+
+go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway@v1.9.6
+go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger 
+```

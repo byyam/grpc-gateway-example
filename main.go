@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 
 	"github.com/golang/glog"
@@ -25,20 +26,20 @@ var (
 	swaggerDir = flag.String("swagger_dir", "template", "path to the directory which contains swagger definitions")
 )
 
-func newGateway(ctx context.Context, opts ...runtime.ServeMuxOption) (http.Handler, error) {
+func newGateway(ctx context.Context, opts ...runtime.ServeMuxOption) http.Handler {
 	mux := runtime.NewServeMux(opts...)
 	dialOpts := []grpc.DialOption{grpc.WithInsecure()}
 	err := gw.RegisterGreeterHandlerFromEndpoint(ctx, mux, *getEndpoint, dialOpts)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	err = gw.RegisterGreeterHandlerFromEndpoint(ctx, mux, *postEndpoint, dialOpts)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	return mux, nil
+	return mux
 }
 
 func serveSwagger(w http.ResponseWriter, r *http.Request) {
@@ -83,18 +84,20 @@ func Run(address string, opts ...runtime.ServeMuxOption) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	router := gin.Default()
+
 	//mux := runtime.NewServeMux()
-	mux := http.NewServeMux()
+	//mux := http.NewServeMux()
 
-	mux.HandleFunc("/swagger/", serveSwagger)
+	//mux.HandleFunc("/swagger/", serveSwagger)
 
-	gw, err := newGateway(ctx, opts...)
-	if err != nil {
-		return err
-	}
-	mux.Handle("/", gw)
+	httpHandler := newGateway(ctx, opts...)
+	//mux.Handle("/", httpHandler)
 
-	return http.ListenAndServe(address, allowCORS(mux))
+	router.POST("/relay/*service_name", gin.WrapH(httpHandler))
+	return router.Run(address)
+
+	//return http.ListenAndServe(address, allowCORS(mux))
 
 }
 
@@ -102,7 +105,7 @@ func main() {
 	flag.Parse()
 	defer glog.Flush()
 
-	if err := Run(":8080"); err != nil {
+	if err := Run(":32600"); err != nil {
 		glog.Fatal(err)
 	}
 }

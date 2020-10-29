@@ -17,10 +17,12 @@ const (
 type server struct{}
 
 func (s *server) SendGet(ctx context.Context, in *pb.TemplateRequest) (*pb.TemplateResponse, error) {
+	log.Printf("%+v", in)
 	return &pb.TemplateResponse{Message: "Received GET method " + in.Name}, nil
 }
 
 func (s *server) SendPost(ctx context.Context, in *pb.TemplateRequest) (*pb.TemplateResponse, error) {
+	log.Printf("%+v", in)
 	return &pb.TemplateResponse{Message: "Received POST method " + in.Name}, nil
 }
 func main() {
