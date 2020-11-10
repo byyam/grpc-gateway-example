@@ -1,8 +1,10 @@
 package main
 
 import (
+	"google.golang.org/grpc/metadata"
 	"log"
 	"net"
+	"strings"
 
 	pb "github.com/rephus/grpc-gateway-example/template"
 	"golang.org/x/net/context"
@@ -11,7 +13,8 @@ import (
 )
 
 const (
-	port = ":10000"
+	port           = ":10000"
+	customerHeader = "X-Customer-Header"
 )
 
 type server struct{}
@@ -22,6 +25,15 @@ func (s *server) SendGet(ctx context.Context, in *pb.TemplateRequest) (*pb.Templ
 }
 
 func (s *server) SendPost(ctx context.Context, in *pb.TemplateRequest) (*pb.TemplateResponse, error) {
+	userID := ""
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		log.Printf("md:%+v", md)
+		if uID, ok := md[strings.ToLower(customerHeader)]; ok {
+			userID = strings.Join(uID, ",")
+		}
+	}
+	log.Printf("userId:%s", userID)
+
 	log.Printf("%+v", in)
 	return &pb.TemplateResponse{Message: "Received POST method " + in.Name}, nil
 }

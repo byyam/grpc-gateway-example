@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	grpcPort = "10000"
+	grpcPort       = "10000"
+	customerHeader = "X-Customer-Header"
 )
 
 var (
@@ -139,6 +140,16 @@ func SetHeader() gin.HandlerFunc {
 	}
 }
 
+// https://grpc-ecosystem.github.io/grpc-gateway/docs/customizingyourgateway/
+func customMatcher(key string) (string, bool) {
+	switch key {
+	case customerHeader:
+		return key, true
+	default:
+		return runtime.DefaultHeaderMatcher(key)
+	}
+}
+
 func Run(address string) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -153,9 +164,12 @@ func Run(address string) error {
 	//mux := http.NewServeMux()
 
 	//mux.HandleFunc("/swagger/", serveSwagger)
-	opts := runtime.WithMarshalerOption("application/json", &runtime.JSONBuiltin{})
+	opts := []runtime.ServeMuxOption{
+		runtime.WithMarshalerOption("application/json", &runtime.JSONBuiltin{}),
+		runtime.WithIncomingHeaderMatcher(customMatcher),
+	}
 
-	httpHandler := newGateway(ctx, opts)
+	httpHandler := newGateway(ctx, opts...)
 	//mux.Handle("/", httpHandler)
 
 	router.POST("/relay/*service_name", gin.WrapH(httpHandler))
