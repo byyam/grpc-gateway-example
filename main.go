@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
@@ -26,15 +31,53 @@ var (
 	swaggerDir = flag.String("swagger_dir", "template", "path to the directory which contains swagger definitions")
 )
 
+var endpoints = []string{
+	"localhost:10000",
+	"localhost:10001",
+}
+
+func getRandEndpoint(interceptors ...grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
+	endpoint := endpoints[rand.Intn(len(endpoints))]
+
+	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithUnaryInterceptor(newRefreshClientConn()))
+	if err != nil {
+		fmt.Printf("dial:%s error:%s, get rand endpoint continue...", endpoint, err.Error())
+		time.Sleep(time.Second)
+	}
+	fmt.Println("connection:", endpoint)
+
+	return conn, nil
+}
+
+func newRefreshClientConn() grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		var err error
+		cc, err = getRandEndpoint()
+		if err != nil {
+			return err
+		}
+		defer cc.Close()
+		fmt.Printf("refresh connection:%s", method)
+		err = invoker(ctx, method, req, reply, cc, opts...)
+		return err
+	}
+}
+
 func newGateway(ctx context.Context, opts ...runtime.ServeMuxOption) http.Handler {
 	mux := runtime.NewServeMux(opts...)
-	dialOpts := []grpc.DialOption{grpc.WithInsecure()}
-	err := gw.RegisterGreeterHandlerFromEndpoint(ctx, mux, *getEndpoint, dialOpts)
+	/*	dialOpts := []grpc.DialOption{grpc.WithInsecure()}
+		err := gw.RegisterGreeterHandlerFromEndpoint(ctx, mux, *getEndpoint, dialOpts)
+		if err != nil {
+			panic(err)
+		}
+	*/
+	conn, err := getRandEndpoint(newRefreshClientConn())
 	if err != nil {
 		panic(err)
 	}
+	defer conn.Close()
 
-	err = gw.RegisterGreeterHandlerFromEndpoint(ctx, mux, *postEndpoint, dialOpts)
+	err = gw.RegisterGreeterHandler(ctx, mux, conn)
 	if err != nil {
 		panic(err)
 	}
@@ -79,19 +122,40 @@ func allowCORS(h http.Handler) http.Handler {
 	})
 }
 
-func Run(address string, opts ...runtime.ServeMuxOption) error {
+func GetBodyRaw(c *gin.Context) []byte {
+	var bodyBytes []byte
+	if c.Request.Body != nil {
+		bodyBytes, _ = ioutil.ReadAll(c.Request.Body)
+	}
+	_ = c.Request.Body.Close()
+	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	return bodyBytes
+}
+
+func SetHeader() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Next()
+	}
+}
+
+func Run(address string) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	rand.Seed(time.Now().UnixNano())
+
 	router := gin.Default()
+	router.Use(SetHeader())
 
 	//mux := runtime.NewServeMux()
 	//mux := http.NewServeMux()
 
 	//mux.HandleFunc("/swagger/", serveSwagger)
+	opts := runtime.WithMarshalerOption("application/json", &runtime.JSONBuiltin{})
 
-	httpHandler := newGateway(ctx, opts...)
+	httpHandler := newGateway(ctx, opts)
 	//mux.Handle("/", httpHandler)
 
 	router.POST("/relay/*service_name", gin.WrapH(httpHandler))
